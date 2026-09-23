@@ -1,0 +1,90 @@
+﻿{% extends 'planner/base.html' %}
+{% block content %}
+<section class="page-intro">
+  <div>
+    <div class="eyebrow">Панель закупщика</div>
+    <h1>Что нужно заказать сейчас</h1>
+    <p>Панель объединяет спрос, текущий запас, поставки в пути и качество входных данных. Выберите расчёт, оцените риски и перейдите к заказу.</p>
+  </div>
+  <div class="toolbar"><a class="button secondary" href="{% url 'data_status' %}">Обновить данные</a><a class="button" href="#new-run">Новый расчёт</a></div>
+</section>
+
+{% if dashboard_run %}
+<section class="card">
+  <div class="card-heading"><div><h2>Контекст панели</h2><p>Показатели и графики строятся по одному сохранённому расчёту, поэтому цифры всегда можно проверить.</p></div><a href="{% url 'run_detail' dashboard_run.pk %}">Открыть рекомендации →</a></div>
+  <div class="dashboard-controls">
+    <form method="get">
+      <p><label for="dashboard-run">Расчёт для анализа</label><select id="dashboard-run" name="run">{% for run in dashboard_runs %}<option value="{{ run.pk }}"{% if run.pk == selected_run_id %} selected{% endif %}>№{{ run.pk }} · {{ run.supplier }} · {{ run.as_of }}{% if run.approved %} · утверждён{% endif %}</option>{% endfor %}</select></p>
+      <button>Показать</button>
+    </form>
+  </div>
+</section>
+
+<section class="metric-grid" aria-label="Ключевые показатели расчёта">
+  <article class="metric"><div class="metric-label">Позиций к заказу</div><div class="metric-value">{{ dashboard_stats.positions }}</div><div class="metric-note">Строк с положительным количеством</div></article>
+  <article class="metric"><div class="metric-label">Объём заказа</div><div class="metric-value">{{ dashboard_stats.quantity }}</div><div class="metric-note">Единиц закупки по расчёту</div></article>
+  <article class="metric"><div class="metric-label">Риск дефицита</div><div class="metric-value">{{ dashboard_stats.critical }}</div><div class="metric-note">Позиций с высокой срочностью</div></article>
+  <article class="metric"><div class="metric-label">Требуют проверки</div><div class="metric-value">{{ dashboard_stats.blocked }}</div><div class="metric-note">Не могут быть утверждены</div></article>
+</section>
+
+<section class="chart-grid">
+  <article class="chart-panel">
+    <h2>Динамика спроса</h2>
+    <p>Суммарные продажи {{ dashboard_run.supplier }} за 12 завершённых месяцев, в единицах учёта.</p>
+    <div class="chart" role="img" aria-label="График динамики спроса за 12 месяцев">
+      {% if trend_has_data %}
+      <svg viewBox="0 0 760 250" preserveAspectRatio="none" aria-hidden="true">
+        <rect x="58" y="16" width="686" height="192" fill="#fbfdff" stroke="#dfe7ee"/>
+        {% for tick in trend_ticks %}<line x1="58" x2="744" y1="{{ tick.y }}" y2="{{ tick.y }}" stroke="#e6edf2" stroke-width="1"/><text x="50" y="{{ tick.y|add:4 }}" text-anchor="end" fill="#718190" font-size="11">{{ tick.value|floatformat:0 }}</text>{% endfor %}
+        <path d="{{ trend_area }}" fill="#1976a9" opacity=".12"/>
+        <polyline points="{{ trend_line }}" fill="none" stroke="#1976a9" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+        {% for point in trend_points %}
+        <circle cx="{{ point.x }}" cy="{{ point.y }}" r="3.5" fill="#fff" stroke="#1976a9" stroke-width="2"><title>{{ point.label }}: {{ point.value|floatformat:0 }}</title></circle>
+        {% if point.show_label %}<text x="{{ point.x }}" y="236" text-anchor="middle" fill="#718190" font-size="11">{{ point.label }}</text>{% endif %}
+        {% endfor %}
+      </svg>
+      {% else %}<p class="muted">Недостаточно количественной истории продаж для графика.</p>{% endif %}
+    </div>
+  </article>
+  <article class="chart-panel">
+    <h2>Распределение срочности</h2>
+    <p>Сколько SKU требуют немедленного внимания и сколько можно заказать планово.</p>
+    <div class="bar-list" role="img" aria-label="Распределение рекомендаций по срочности">
+      {% if risk_has_data %}{% for item in risk_data %}<div class="bar-row"><span class="bar-label">{{ item.label }}</span><span class="bar-track"><span class="bar-fill {{ item.tone }}" style="width:{{ item.percent }}%"></span></span><span class="bar-value">{{ item.value|floatformat:0 }}</span></div>{% endfor %}{% else %}<span class="muted">В расчёте нет позиций для отображения.</span>{% endif %}
+    </div>
+  </article>
+</section>
+
+<section class="chart-grid">
+  <article class="chart-panel">
+    <h2>Заказ по категориям</h2>
+    <p>Количество к закупке по категориям. Включены только позиции с положительной рекомендацией.</p>
+    <div class="bar-list" role="img" aria-label="Структура заказа по категориям">
+      {% if category_has_data %}{% for item in category_data %}<div class="bar-row"><span class="bar-label" title="{{ item.label }}">{{ item.label }}</span><span class="bar-track"><span class="bar-fill {{ item.tone }}" style="width:{{ item.percent }}%"></span></span><span class="bar-value">{{ item.quantity|floatformat:0 }}</span></div>{% endfor %}{% else %}<span class="muted">Нет позиций с положительной рекомендацией.</span>{% endif %}
+    </div>
+  </article>
+  <article class="chart-panel">
+    <h2>Что скорректировало расчёт</h2>
+    <p>Алгоритм отдельно показывает влияние отсутствия товара, разовых продаж и поставок в пути.</p>
+    <div class="bar-list" role="img" aria-label="Факторы корректировки расчёта">
+      {% if driver_has_data %}{% for item in driver_data %}<div class="bar-row"><span class="bar-label">{{ item.label }}</span><span class="bar-track"><span class="bar-fill {{ item.tone }}" style="width:{{ item.percent }}%"></span></span><span class="bar-value">{{ item.value|floatformat:0 }}</span></div>{% endfor %}{% else %}<span class="muted">Корректировки не зафиксированы: нет stockout, разовых продаж или поставок в пути.</span>{% endif %}
+    </div>
+  </article>
+</section>
+
+<section class="card">
+  <div class="card-heading"><div><h2>Следующее действие</h2><p>Перейдите к строкам заказа: там есть обоснование, исходные показатели и возможность правки с причиной.</p></div><a class="button" href="{% url 'run_detail' dashboard_run.pk %}">Проверить рекомендации</a></div>
+  {% if dashboard_stats.blocked %}<div class="data-note">В этом расчёте есть {{ dashboard_stats.blocked }} позиций с неполными или несогласованными входными данными. Они останутся в черновике и будут исключены из утверждения, пока проблема не будет устранена.</div>{% else %}<div class="data-note" style="border-color:#48a578;color:#1d6843;background:#eefaf3">По текущему расчёту нет блокирующих проблем. После проверки менеджер может утвердить заказ.</div>{% endif %}
+</section>
+{% else %}
+<section class="card"><div class="card-heading"><div><h2>Панель появится после первого расчёта</h2><p>Загрузите данные, укажите поставщика, склад и дату расчёта. После этого здесь появятся показатели, графики и рекомендации.</p></div><a class="button" href="#new-run">Создать расчёт</a></div></section>
+{% endif %}
+
+<section id="new-run" class="card">
+  <div class="card-heading"><div><div class="eyebrow">Новый запуск</div><h2>Рассчитать потребность</h2><p>Сервис использует историю продаж, сезонность, рост, остатки, товар в пути, stockout и правила поставщика.</p></div></div>
+  <form method="post" action="{% url 'new_run' %}">{% csrf_token %}{{ run_form.as_p }}<button>Сформировать рекомендации</button></form>
+  <small>Расчёт создаёт черновик. Заказ не отправляется поставщику автоматически и требует утверждения ответственного сотрудника.</small>
+</section>
+
+
+{% endblock %}

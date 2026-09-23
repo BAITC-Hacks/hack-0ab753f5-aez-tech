@@ -1,0 +1,21 @@
+{% extends 'planner/base.html' %}
+{% block title %}Заказы · Планирование закупок{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <div><div class="eyebrow">Работа с заказами</div><h1>Заказы по поставщикам</h1><p>Здесь собраны последние расчёты по каждому поставщику. Откройте нужный черновик, чтобы проверить позиции, скорректировать количество и утвердить заказ.</p></div>
+  <a class="button" href="{% url 'home' %}#new-run">Новый расчёт</a>
+</section>
+
+<section class="order-cards">
+  {% for group in groups %}
+  <article class="order-card">
+    <div class="order-card-head"><div><h2>{{ group.run.supplier }}</h2><p>Расчёт №{{ group.run.pk }} от {{ group.run.as_of }}</p></div>{% if group.run.approved %}<span class="badge good">Утверждён</span>{% else %}<span class="badge neutral">Черновик</span>{% endif %}</div>
+    <div class="order-stats"><div class="order-stat"><span>К заказу</span><strong>{{ group.positions }}</strong></div><div class="order-stat"><span>Объём</span><strong>{{ group.quantity|floatformat:0 }}</strong></div><div class="order-stat"><span>Высокий риск</span><strong class="{% if group.critical %}bad{% endif %}">{{ group.critical }}</strong></div><div class="order-stat"><span>Проблемы данных</span><strong class="{% if group.blocked %}warn{% endif %}">{{ group.blocked }}</strong></div></div>
+    {% if group.blocked %}<div class="data-note">Позиции с проблемами данных не пройдут утверждение, пока не будут исправлены или исключены.</div>{% endif %}
+    <p style="margin:18px 0 0"><a class="button" href="{% url 'run_detail' group.run.pk %}">Открыть рекомендации</a></p>
+  </article>
+  {% empty %}
+  <section class="card"><h2>Расчётов пока нет</h2><p>Сначала загрузите данные и создайте хотя бы один расчёт потребности.</p><a class="button" href="{% url 'home' %}#new-run">Создать расчёт</a></section>
+  {% endfor %}
+</section>
+{% endblock %}

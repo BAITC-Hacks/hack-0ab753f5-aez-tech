@@ -1,0 +1,43 @@
+{% extends 'planner/base.html' %}
+{% block title %}Данные · Планирование закупок{% endblock %}
+{% block content %}
+<section class="page-intro">
+  <div><div class="eyebrow">Качество входных данных</div><h1>Данные для расчёта</h1><p>Загрузите свежие выгрузки и проверьте, что источник, дата снимка и предупреждения соответствуют расчёту. Неполные данные остаются видимыми и блокируют утверждение затронутых строк.</p></div>
+  <a class="button secondary" href="{% url 'home' %}">Вернуться к панели</a>
+</section>
+
+<div class="grid">
+  <section class="card">
+    <div class="card-heading"><div><h2>Загрузить файл</h2><p>Выберите поставщика и тип выгрузки. Система сохраняет версию и не удваивает повторный импорт того же файла.</p></div></div>
+    <form method="post" action="{% url 'upload' %}" enctype="multipart/form-data">{% csrf_token %}{{ upload_form.as_p }}<button>Импортировать файл</button></form>
+  </section>
+  <section class="card">
+    <div class="card-heading"><div><h2>Что нужно для корректного заказа</h2><p>Эти источники используются в расчёте и объяснении каждой строки.</p></div></div>
+    <div class="data-note"><strong>Обязательно:</strong> история продаж, свободный остаток на дату, товары в пути с ожидаемой датой, MOQ/кратность и срок поставки.<br><br><strong>Для точности:</strong> категория товара, периоды stockout, обезличенный ID клиента и цена. Клиентские данные загружаются только в обезличенном виде.</div>
+    <p class="muted" style="font-size:13px">Файлы сезонности по выручке не подменяют сезонность в штуках: её сервис рассчитывает из количественной истории продаж.</p>
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-heading"><div><h2>Готовность данных к расчёту</h2><p>Проверка построена по уже загруженным материалам. Она не скрывает пробелы в исходном наборе и объясняет, как сервис обработает их в расчёте.</p></div></div>
+  <div class="scroll"><table><thead><tr><th>Поставщик</th><th>Продажи</th><th>Свободный остаток</th><th>MOQ / кратность</th><th>Политика запаса</th><th>В пути</th><th>Stockout</th><th>Клиентский hash</th><th>Статус</th></tr></thead><tbody>
+  {% for row in readiness_rows %}<tr>
+    <td><strong>{{ row.supplier }}</strong></td>
+    <td><span class="badge {{ row.sales.state }}">{{ row.sales.text }}</span></td>
+    <td><span class="badge {{ row.stock.state }}">{{ row.stock.text }}</span></td>
+    <td><span class="badge {{ row.moq.state }}">{{ row.moq.text }}</span></td>
+    <td><span class="badge {{ row.policy.state }}">{{ row.policy.text }}</span></td>
+    <td><span class="badge {{ row.inbound.state }}">{{ row.inbound.text }}</span></td>
+    <td><span class="badge {{ row.stockout.state }}">{{ row.stockout.text }}</span></td>
+    <td><span class="badge {{ row.customer.state }}">{{ row.customer.text }}</span></td>
+    <td>{% if row.ready %}<span class="badge good">Готово</span>{% else %}<span class="badge warn">Расчёт с ограничениями</span>{% endif %}</td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  <p class="muted" style="font-size:13px">Отсутствие stockout и обезличенного ID клиента не останавливает расчёт: в первом случае компенсация спроса равна нулю, во втором разовые продажи проверяются по документам. Неподтверждённая политика, отсутствующий остаток и неполный MOQ блокируют утверждение затронутых строк.</p>
+</section>
+
+<section class="card">
+  <div class="card-heading"><div><h2>Последние версии источников</h2><p>По каждому поставщику показана последняя загруженная версия каждого типа данных.</p></div></div>
+  <div class="scroll"><table><thead><tr><th>Поставщик</th><th>Источник</th><th>Файл</th><th>Дата снимка</th><th>Строк</th><th>Предупреждения</th><th>Загружен</th></tr></thead><tbody>{% for row in supplier_rows %}{% for batch in row.batches %}<tr><td>{{ row.supplier }}</td><td>{{ batch.get_kind_display }}</td><td>{{ batch.filename }}</td><td>{{ batch.as_of|default:'—' }}</td><td class="num">{{ batch.row_count }}</td><td>{% if batch.warnings %}<span class="badge warn">{{ batch.warnings|length }}</span>{% else %}<span class="badge good">Нет</span>{% endif %}</td><td>{{ batch.imported_at|date:'d.m.Y H:i' }}</td></tr>{% empty %}<tr><td>{{ row.supplier }}</td><td colspan="6">Нет загруженных источников.</td></tr>{% endfor %}{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

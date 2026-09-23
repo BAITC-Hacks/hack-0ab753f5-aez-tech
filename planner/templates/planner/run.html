@@ -1,0 +1,52 @@
+{% extends 'planner/base.html' %}
+{% block content %}
+<section class="page-intro">
+  <div>
+    <div class="eyebrow">Расчёт №{{ run.pk }}</div>
+    <h1>{{ run.supplier }}</h1>
+    <p>Дата расчёта: {{ run.as_of }} · Склад: {{ run.warehouse }}{% if run.category %} · Категория: {{ run.category }}{% endif %}</p>
+  </div>
+  {% if run.approved %}<span class="badge good">Утверждён {{ run.approved_at|date:'d.m.Y H:i' }}</span>{% else %}<span class="badge neutral">Черновик</span>{% endif %}
+</section>
+
+<section class="grid-3" aria-label="Сводка расчёта">
+  <article class="metric"><div class="metric-label">Позиций в расчёте</div><div class="metric-value">{{ total }}</div><div class="metric-note">SKU в выбранном срезе</div></article>
+  <article class="metric"><div class="metric-label">Позиций к заказу</div><div class="metric-value">{{ orders }}</div><div class="metric-note">Положительное количество</div></article>
+  <article class="metric"><div class="metric-label">Требуют проверки</div><div class="metric-value">{{ blocked_orders }}</div><div class="metric-note">Не попадут в утверждённый заказ</div></article>
+</section>
+
+<section class="card">
+  <div class="card-heading"><div><h2>Финальная проверка заказа</h2><p>Сводка по количеству, риску и ручным решениям перед утверждением.</p></div>{% if run.approved %}<span class="badge good">Заказ уже утверждён</span>{% elif order_summary.ready %}<span class="badge good">Можно утверждать</span>{% else %}<span class="badge warn">Сначала устраните блокировки</span>{% endif %}</div>
+  <div class="review-grid">
+    <div class="review-stat"><span>Объём заказа</span><strong>{{ order_summary.quantity|floatformat:0 }}</strong><small>единиц закупки</small></div>
+    <div class="review-stat"><span>Высокий риск</span><strong class="{% if order_summary.critical %}bad{% endif %}">{{ order_summary.critical }}</strong><small>позиций требуют внимания</small></div>
+    <div class="review-stat"><span>Ручные изменения</span><strong>{{ order_summary.changed }}</strong><small>строк с причиной закупщика</small></div>
+    <div class="review-stat"><span>Блокировки</span><strong class="{% if order_summary.blocked %}bad{% else %}good{% endif %}">{{ order_summary.blocked }}</strong><small>позиций не войдут в утверждение</small></div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="toolbar">
+    <a href="?only=orders" class="button {% if only != 'orders' %}secondary{% endif %}">К заказу</a>
+    <a href="?only=blocked" class="button {% if only != 'blocked' %}secondary{% endif %}">Требуют проверки</a>
+    <a href="?only=all" class="button {% if only != 'all' %}secondary{% endif %}">Все позиции</a>
+    <span class="toolbar-spacer"></span>
+    {% if run.approved %}<a href="{% url 'export_run' run.pk %}" class="button">Скачать CSV</a>{% elif perms.planner.can_approve_order %}<form method="post" action="{% url 'approve_run' run.pk %}">{% csrf_token %}<button>Утвердить заказ</button></form>{% endif %}
+  </div>
+  <form method="get" class="search" style="margin-top:16px"><input type="hidden" name="only" value="{{ only }}"><input name="q" value="{{ query }}" placeholder="Код, артикул или название"><button class="secondary">Найти</button></form>
+</section>
+
+<section class="card">
+  <div class="card-heading"><div><h2>Рекомендации</h2><p>Раскройте «Показатели расчёта», чтобы проверить исходные величины строки.</p></div></div>
+  <div class="scroll"><table><thead><tr><th>SKU и товар</th><th>Категория</th><th>Рекомендация</th><th>Срочность</th><th>Обоснование</th><th>Решение закупщика</th></tr></thead><tbody>
+  {% for rec in page %}<tr>
+    <td><strong>{{ rec.product.sku }}</strong><span class="table-subtext">{{ rec.product.article }}{% if rec.product.name %} · {{ rec.product.name }}{% endif %}</span></td>
+    <td>{{ rec.product.category|default:'—' }}</td>
+    <td class="num"><strong>{{ rec.suggested_quantity }}</strong><br><small>ед. закупки</small></td>
+    <td>{% if rec.urgency == 'высокая' %}<span class="badge bad">Высокая</span>{% elif rec.urgency == 'средняя' %}<span class="badge warn">Средняя</span>{% else %}<span class="badge neutral">Обычная</span>{% endif %}</td>
+    <td><span class="table-subtext" style="margin-top:0;max-width:440px">{{ rec.explanation }}</span>{% if rec.blockers %}<div style="margin-top:8px">{% for blocker in rec.blockers %}<div class="badge bad" style="margin:0 4px 4px 0">{{ blocker }}</div>{% endfor %}</div>{% endif %}<details><summary>Показатели расчёта</summary><small>Уровень: {{ rec.details.monthly_level }} · Горизонт: {{ rec.details.forecast_horizon }} · Страховой запас: {{ rec.details.safety_stock }} · Свободно: {{ rec.details.free_stock }} · Поступит: {{ rec.details.inbound_before_horizon }} · До округления: {{ rec.details.raw_need }} · Срок поставки: {{ rec.details.lead_days }} дн. · Кратность: {{ rec.details.pack_multiple }}.</small></details></td>
+    <td>{% if run.approved %}<strong>{{ rec.final_quantity }}</strong>{% else %}<form class="compact" method="post" action="{% url 'edit_recommendation' rec.pk %}">{% csrf_token %}<input type="number" step="0.001" min="0" name="quantity" value="{{ rec.final_quantity|stringformat:'s' }}" aria-label="Количество"><input name="reason" placeholder="Причина изменения" aria-label="Причина изменения"><button class="secondary">Сохранить</button></form>{% if rec.changed_reason %}<small>Изменено: {{ rec.changed_reason }}</small>{% endif %}{% endif %}</td>
+  </tr>{% empty %}<tr><td colspan="6">Нет строк для выбранного фильтра.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<div class="pager">{% if page.has_previous %}<a href="?only={{ only }}&q={{ query|urlencode }}&page={{ page.previous_page_number }}">← Назад</a>{% endif %}<span>Страница {{ page.number }} из {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?only={{ only }}&q={{ query|urlencode }}&page={{ page.next_page_number }}">Далее →</a>{% endif %}</div>
+{% endblock %}
